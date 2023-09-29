@@ -1,2 +1,3 @@
+target_host: "pi" # Replace with your desired Host
 custom_url: "https://example.com"  # Replace with your desired URL
-kiosk.user: "pi" # Replace with your desired user
+kiosk_user: "pi" # Replace with your desired user

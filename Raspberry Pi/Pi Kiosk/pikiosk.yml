@@ -35,29 +35,37 @@
           dest: /etc/xdg/lxsession/LXDE-pi/autostart
         become: yes     
 
+      - name: Check if X11 or Xvfb is running
+        command: pgrep -f "Xorg|Xvfb"
+        register: x11_status
+        ignore_errors: yes
+        changed_when: false  # We don't want to treat this as a change
 
-      - name: Determine active display (Xvfb)
-        shell: Xvfb :0 -screen 0 1280x1024x16 -ac
+      - name: Start Xvfb on a different display if X11 is running
+        command: Xvfb :1 -screen 0 1280x1024x16 -ac
         async: 1
         poll: 0
         register: xvfb_result
         changed_when: false
+        when: x11_status.stdout is not defined
 
       - name: Wait for Xvfb to start (adjust sleep time as needed)
-        async_status:
-          jid: "{{ xvfb_result.ansible_job_id }}"
-        register: xvfb_job_result
-        until: xvfb_job_result.finished
-        retries: 60
-        delay: 1
-        ignore_errors: yes
+        wait_for:
+          timeout: 60
+          state: started
+        when: x11_status.stdout is not defined
 
+      - name: Set DISPLAY variable for Chromium
+        set_fact:
+          display_var: "{{ 'DISPLAY=:1' if x11_status.stdout is not defined else 'DISPLAY=:0' }}"
+        delegate_to: localhost
+        
       - name: Launch Chromium to create config files
         become: yes
-        become_user: {{kiosk.user}}
+        become_user: "{{ kiosk_user }}"
         command: chromium-browser
         environment:
-          DISPLAY: ":0"
+          DISPLAY: "{{ display_var }}"
         async: 10
         poll: 0
         ignore_errors: yes
@@ -74,10 +82,19 @@
         become_user: pi
         command: >
           sed -i 's/"exited_cleanly":false/"exited_cleanly":true/'
-          /home/{{kiosk.user}}/.config/chromium/Default/Preferences
+          /home/{{ kiosk_user }}/.config/chromium/Default/Preferences
 
       - name: Update Chromium Preferences (exit_type)
         become_user: pi
         command: >
           sed -i 's/"exit_type":"Crashed"/"exit_type":"Normal"/'
-          /home/{{kiosk.user}}/.config/chromium/Default/Preferences       
+          /home/{{ kiosk_user }}/.config/chromium/Default/Preferences       
+
+      - name: Reboot host and wait for it to restart
+        reboot:
+          msg: "Reboot initiated by Ansible"
+          connect_timeout: 5
+          reboot_timeout: 600
+          pre_reboot_delay: 0
+          post_reboot_delay: 30
+          test_command: whoami
