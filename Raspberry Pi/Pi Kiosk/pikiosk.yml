@@ -125,7 +125,6 @@
       - name: Install log2ram
         apt:
           name: log2ram
-        state: latest
         notify: Restart log2ram
 
       - name: Set log2ram config options
@@ -152,6 +151,15 @@
           pre_reboot_delay: 0
           post_reboot_delay: 30
           test_command: whoami
+      
+      - name: Set the maximum log size
+        command: sudo perl -pe 's/^#?SystemMaxUse=.*$/SystemMaxUse=20M/g' -i /etc/systemd/journald.conf
+
+      - name: Restart Journald
+        command: sudo systemctl restart systemd-journald
+
+      - name: Clean old logs
+        command: sudo journalctl --vacuum-size=16M
 
     handlers:
           - name: Restart log2ram
