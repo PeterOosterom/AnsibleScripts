@@ -7,4 +7,6 @@
 
 @unclutter -idle 10 -noevents &
 
-@chromium-browser --kiosk {{ custom_url }}
+@chromium-browser --kiosk --noerrdialogs --disable-infobars {{ custom_url }}
+
+@/etc/xdg/lxsession/LXDE-pi/xdotool.sh

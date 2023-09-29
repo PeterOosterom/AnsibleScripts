@@ -14,12 +14,13 @@
           msg: "Aborted playbook execution. Confirm target host before proceeding."
         when: confirm_target != "yes"
 
-      - name: Install Chromium,unclutter and Xvfb if not already installed
+      - name: Install Chromium,unclutter,xdotool and Xvfb if not already installed
         apt:
           name: 
             - chromium-browser
             - xvfb
             - unclutter
+            - xdotool
           state: present
 
       - name: Create the autostart directory if it doesn't exist
@@ -34,6 +35,18 @@
           src: templates/autostart.j2
           dest: /etc/xdg/lxsession/LXDE-pi/autostart
         become: yes     
+
+      - name: Create the xdotool file
+        template:
+          src: templates/xdotool.j2
+          dest: /etc/xdg/lxsession/LXDE-pi/xdotool.sh
+        become: yes 
+
+      - name: Make the xdotool file executable
+        file:
+          path: /etc/xdg/lxsession/LXDE-pi/xdotool.sh
+          mode: "0755"
+        become: yes
 
       - name: Check if X11 or Xvfb is running
         command: pgrep -f "Xorg|Xvfb"
