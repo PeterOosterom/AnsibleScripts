@@ -14,14 +14,16 @@
           msg: "Aborted playbook execution. Confirm target host before proceeding."
         when: confirm_target != "yes"
 
-      - name: Install Chromium,unclutter,xdotool and Xvfb if not already installed
+      - name: Install Chromium,unclutter,rsync,wget,xdotool and Xvfb if not already installed
         apt:
           name: 
-            - chromium-browser
-            - xvfb
-            - unclutter
-            - xdotool
-          state: present
+            - chromium-browser #browser
+            - xvfb #creates a virtualframbuffer to initialize chrome
+            - unclutter #removes mousepointer
+            - xdotool #to change tabs in chrom
+            - rsync #for log2ram
+            - wget #to install log2ram
+          state: latest
 
       - name: Create the autostart directory if it doesn't exist
         file:
@@ -103,6 +105,45 @@
           sed -i 's/"exit_type":"Crashed"/"exit_type":"Normal"/'
           /home/{{ kiosk_user }}/.config/chromium/Default/Preferences       
 
+      - name: Add gpg key
+        shell: 
+          cmd: >
+            curl -fsSL {{ log2ram_gpg }} | gpg --dearmor --yes -o {{ log2ram_keyring }}
+          creates: "{{ log2ram_keyring }}"
+                
+      - name: Add log2ramapt repository
+        apt_repository:
+          repo: "{{ log2ram_apt_repository }}"
+          filename: log2ram
+        register: log2ram_apt_repo
+
+      - name: Update apt cache
+        apt:
+          update_cache: true
+        when: log2ram_apt_repo is changed
+
+      - name: Install log2ram
+        apt:
+          name: log2ram
+        state: latest
+        notify: Restart log2ram
+
+      - name: Set log2ram config options
+        lineinfile:
+          path: /etc/log2ram.conf
+          regexp: "{{ item.regexp }}"
+          line: "{{ item.line }}"
+          backrefs: true
+        loop:
+          - {regexp: '^SIZE=(.*)$', line: 'SIZE={{ log2ram_size }}'}
+          - {regexp: 'USE_RSYNC=(.*)$', line: 'USE_RSYNC={{ log2ram_use_rsync }}'}
+          - {regexp: '^MAIL=(.*)$', line: 'MAIL={{ log2ram_mail }}'}
+          - {regexp: '^PATH_DISK=(.*)$', line: 'PATH_DISK="{{ log2ram_path_disk }}"'}
+          - {regexp: '^ZL2R=(.*)$', line: 'ZL2R={{ log2ram_use_z2lr|lower }}'}
+          - {regexp: '^COMP_ALG=(.*)$', line: 'COMP_ALG={{ log2ram_comp_alg }}'}
+          - {regexp: '^LOG_DISK_SIZE=(.*)$', line: 'LOG_DISK_SIZE={{ log2ram_log_disk_size }}'}
+        notify: Restart log2ram
+
       - name: Reboot host and wait for it to restart
         reboot:
           msg: "Reboot initiated by Ansible"
@@ -111,3 +152,9 @@
           pre_reboot_delay: 0
           post_reboot_delay: 30
           test_command: whoami
+
+    handlers:
+          - name: Restart log2ram
+            systemd:
+              name: log2ram
+              state: restarted

@@ -1,4 +1,5 @@
-# AnsibleScripts
-Handy ansible scripts
+# Pi Kios
+Ansible script to transform a stock raspbian install into a full kiosk.
 
- ansible-playbook -e @vars.yml pikiosk.yml
+Run with:
+ansible-playbook -e @vars.yml pikiosk.yml
