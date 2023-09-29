@@ -14,10 +14,13 @@
           msg: "Aborted playbook execution. Confirm target host before proceeding."
         when: confirm_target != "yes"
 
-      - name: ensure chrome
+      - name: Install Chromium,unclutter and Xvfb if not already installed
         apt:
-          name: chromium-browser
-          state: latest
+          name: 
+            - chromium-browser
+            - xvfb
+            - unclutter
+          state: present
 
       - name: Create the autostart directory if it doesn't exist
         file:
@@ -32,14 +35,49 @@
           dest: /etc/xdg/lxsession/LXDE-pi/autostart
         become: yes     
 
+
+      - name: Determine active display (Xvfb)
+        shell: Xvfb :0 -screen 0 1280x1024x16 -ac
+        async: 1
+        poll: 0
+        register: xvfb_result
+        changed_when: false
+
+      - name: Wait for Xvfb to start (adjust sleep time as needed)
+        async_status:
+          jid: "{{ xvfb_result.ansible_job_id }}"
+        register: xvfb_job_result
+        until: xvfb_job_result.finished
+        retries: 60
+        delay: 1
+        ignore_errors: yes
+
+      - name: Launch Chromium to create config files
+        become: yes
+        become_user: {{kiosk.user}}
+        command: chromium-browser
+        environment:
+          DISPLAY: ":0"
+        async: 10
+        poll: 0
+        ignore_errors: yes
+
+
+      - name: Wait for Chromium to launch (adjust sleep time as needed)
+        pause:
+          seconds: 10
+
+      - name: Kill Chromium to prevent interference
+        shell: pkill chromium-browser || true
+
       - name: Update Chromium Preferences
         become_user: pi
         command: >
           sed -i 's/"exited_cleanly":false/"exited_cleanly":true/'
-          /home/pi/.config/chromium/Default/Preferences
+          /home/{{kiosk.user}}/.config/chromium/Default/Preferences
 
       - name: Update Chromium Preferences (exit_type)
         become_user: pi
         command: >
           sed -i 's/"exit_type":"Crashed"/"exit_type":"Normal"/'
-          /home/pi/.config/chromium/Default/Preferences       
+          /home/{{kiosk.user}}/.config/chromium/Default/Preferences       
